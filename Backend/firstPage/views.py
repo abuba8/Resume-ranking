@@ -3,8 +3,7 @@ from django.http import JsonResponse
 import joblib
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
-import json
-
+from zipfile import ZipFile
 import joblib
 import json
 import PyPDF2
@@ -97,6 +96,7 @@ def create_profile(file):
     return(dataf)
 
 
+
 def scoreFile(request):
     doc = request.FILES
     fileObj = doc['filePath']
@@ -105,16 +105,32 @@ def scoreFile(request):
     filePathName = fs.url(filePathName)
     filePath = '.'+filePathName
     file = filePath
-    final_db = pd.DataFrame()
-    dat = create_profile(file)
-    final_db = final_db.append(dat)
+    temp, temp2 = os.path.splitext(fileObj.name)
+    with ZipFile(file, 'r') as zip:
+        x = zip.namelist()
+        zip.extractall('./media/')
+    x = x[1:]
+    print(x)
+    final_db=pd.DataFrame()
+    i=0
+    mypath='./media/'+temp
+    #Path for the files
+    onlyfiles = [os.path.join(mypath, f) for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f))]
+
+    while i < len(onlyfiles):
+        file=onlyfiles[i]
+        dat=create_profile(file)
+        final_db=final_db.append(dat)
+        i+=1
+        #print(final_db)
+    
     final_db2 = final_db['Keyword'].groupby([final_db['Candidate Name'], final_db['Subject']]).count().unstack()
     final_db2.reset_index(inplace = True)
     final_db2.fillna(0, inplace=True)
     candidate_data = final_db2.iloc[:,1:]
     candidate_data.index = final_db2['Candidate Name']
     candidate_data['Total'] = candidate_data['DE']+candidate_data['DL']+candidate_data['ML']+candidate_data['NLP']+candidate_data['Python']+candidate_data['Stats']
-    candidate_data['Total'].sort_values(ascending=False)
+    candidate_data = candidate_data.sort_values(by='Total',ascending=False)
     x = candidate_data
     df = x.to_json()
     #numpy.int64(42)
@@ -147,4 +163,3 @@ class LoginAPI(KnoxLoginView):
         user = serializer.validated_data['user']
         login(request, user)
         return super(LoginAPI, self).post(request, format=None)
-        
